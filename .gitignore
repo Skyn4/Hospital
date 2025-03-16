@@ -1,52 +1,139 @@
-# Prerequisites
-*.d
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+#define MAX_HASTA 100
+#define HASH_SIZE 10
 
-# Linker output
-*.ilk
-*.map
-*.exp
+// Hasta yapýsý
+struct Hasta {
+    int id;
+    char isim[50];
+    int yas;
+    char sikayet[100];
+    int oncelik; // 1 (Acil) - 5 (Düþük)
+};
 
-# Precompiled Headers
-*.gch
-*.pch
+// Baðlý liste düðümü
+struct Node {
+    struct Hasta hasta;
+    struct Node* sonraki;
+};
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
+// Öncelik kuyruðu
+struct OncelikKuyrugu {
+    struct Hasta hastalar[MAX_HASTA];
+    int mevcut;
+};
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+// Dairesel kuyruk (Doktor atama)
+struct DaireselKuyruk {
+    struct Hasta hastalar[MAX_HASTA];
+    int bas, son, count;
+};
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+// Hash tablosu (Reçete numarasý üretme)
+struct ReceteTablosu {
+    int receteNo[HASH_SIZE];
+};
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
+struct Node* hastaListesi = NULL;
+struct OncelikKuyrugu triageQueue = { .mevcut = 0 };
+struct DaireselKuyruk doktorQueue = { .bas = 0, .son = 0, .count = 0 };
+struct ReceteTablosu receteTablo = { .receteNo = {0} };
+int hasta_id_counter = 1;
+int recete_id_counter = 1000;
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+// Yeni hasta ekleme
+void hastaEkle(char isim[], int yas, char sikayet[], int oncelik) {
+    struct Node* yeniHasta = (struct Node*)malloc(sizeof(struct Node));
+    yeniHasta->hasta.id = hasta_id_counter++;
+    strcpy(yeniHasta->hasta.isim, isim);
+    yeniHasta->hasta.yas = yas;
+    strcpy(yeniHasta->hasta.sikayet, sikayet);
+    yeniHasta->hasta.oncelik = oncelik;
+    yeniHasta->sonraki = hastaListesi;
+    hastaListesi = yeniHasta;
+
+    // Öncelik kuyruðuna ekleme
+    triageQueue.hastalar[triageQueue.mevcut++] = yeniHasta->hasta;
+    printf("Hasta eklendi: %s (ID: %d)\n", isim, yeniHasta->hasta.id);
+}
+
+// Öncelik kuyruðunda sýralama
+void triageSirala() {
+    for (int i = 0; i < triageQueue.mevcut - 1; i++) {
+        for (int j = 0; j < triageQueue.mevcut - i - 1; j++) {
+            if (triageQueue.hastalar[j].oncelik > triageQueue.hastalar[j + 1].oncelik) {
+                struct Hasta temp = triageQueue.hastalar[j];
+                triageQueue.hastalar[j] = triageQueue.hastalar[j + 1];
+                triageQueue.hastalar[j + 1] = temp;
+            }
+        }
+    }
+}
+
+// Doktora hasta atama
+void doktoraHastaAta() {
+    if (triageQueue.mevcut == 0) {
+        printf("Bekleyen hasta yok!\n");
+        return;
+    }
+    struct Hasta atananHasta = triageQueue.hastalar[0];
+    for (int i = 1; i < triageQueue.mevcut; i++) {
+        triageQueue.hastalar[i - 1] = triageQueue.hastalar[i];
+    }
+    triageQueue.mevcut--;
+
+    doktorQueue.hastalar[doktorQueue.son] = atananHasta;
+    doktorQueue.son = (doktorQueue.son + 1) % MAX_HASTA;
+    doktorQueue.count++;
+    printf("Hasta doktora atandý: %s (ID: %d)\n", atananHasta.isim, atananHasta.id);
+}
+
+// Reçete numarasý üretme
+int receteUret(int hasta_id) {
+    int recete_no = recete_id_counter++;
+    receteTablo.receteNo[hasta_id % HASH_SIZE] = recete_no;
+    printf("Reçete verildi (Hasta ID: %d, Reçete No: %d)\n", hasta_id, recete_no);
+    return recete_no;
+}
+
+// Hasta taburcu etme
+void hastaTaburcuEt() {
+    if (doktorQueue.count == 0) {
+        printf("Taburcu edilecek hasta yok!\n");
+        return;
+    }
+    struct Hasta taburcuHasta = doktorQueue.hastalar[doktorQueue.bas];
+    doktorQueue.bas = (doktorQueue.bas + 1) % MAX_HASTA;
+    doktorQueue.count--;
+    printf("Hasta taburcu edildi: %s (ID: %d)\n", taburcuHasta.isim, taburcuHasta.id);
+}
+
+// Hasta listesini görüntüleme
+void hastaListesiniGoruntule() {
+    struct Node* gecici = hastaListesi;
+    while (gecici != NULL) {
+        printf("ID: %d, Ýsim: %s, Yaþ: %d, Þikayet: %s, Öncelik: %d\n",
+               gecici->hasta.id, gecici->hasta.isim, gecici->hasta.yas,
+               gecici->hasta.sikayet, gecici->hasta.oncelik);
+        gecici = gecici->sonraki;
+    }
+}
+
+int main() {
+    hastaEkle("Ali Veli", 45, "Göðüs aðrýsý", 1);
+    hastaEkle("Ayþe Yýlmaz", 30, "Bað aðrýsý", 3);
+    hastaEkle("Mehmet Kaya", 60, "Nefes darlýðý", 1);
+    hastaEkle("Zeynep Demir", 25, "Yüksek ateþ", 2);
+
+    triageSirala();
+    doktoraHastaAta();
+    doktoraHastaAta();
+    receteUret(1);
+    hastaTaburcuEt();
+    hastaListesiniGoruntule();
+    return 0;
+}
+
